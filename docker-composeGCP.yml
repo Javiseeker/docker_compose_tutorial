@@ -1,0 +1,81 @@
+version: '3'
+
+services:
+  web:
+    image: nginx
+    container_name: "frontend_service"
+    volumes:
+      - ./Antares2.0/dist/antares:/usr/share/nginx/html
+      - ./nginx/logs/nginx:/var/log/nginx
+    depends_on:
+      - postgres
+      - mongo
+      - broker
+    ports:
+      - "80:80"
+      - "443:443"
+    links:
+      - mongo
+      - broker
+  postgres:
+    image: postgres
+    container_name: "postgres_db"
+    env_file:
+      - postgres-database.env
+    volumes:
+      - ./postgres-database-data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432"
+  mongo:
+    image: mongo
+    container_name: "mongo_db"
+    env_file:
+      - mongo-database.env
+    volumes:
+      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+      - ./mongo-volume:/data/db
+    ports:
+      - "27017-27019:27017-27019"
+  django:
+    build: ./backend
+    container_name: "backend_service"
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend/antares_iot:/antares_iot
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - mongo
+      - broker
+    links:
+      - postgres
+      - mongo
+      - broker
+  broker:
+    image: webcenter/activemq
+    container_name: "activemq_broker"
+    ports:
+      - "1883:1883"
+      - "5672:5672"
+      - "8161:8161"
+      - "61613:61613"
+      - "61614:61614"
+      - "61616:61616"
+    environment:
+      ACTIVEMQ_NAME: amq
+      ACTIVEMQ_REMOVE_DEFAULT_ACCOUNT: 'True'
+      ACTIVEMQ_ADMIN_LOGIN: admin
+      ACTIVEMQ_ADMIN_PASSWORD: admin
+    volumes:
+      - /container_data/activemq/data:/data/activemq
+      - /container_data/activemq/log:/var/log/activemq
+  etl:
+    image: starefossen/transporter
+    container_name: "etl"
+    depends_on:
+      - mongo
+      - postgres
+    links:
+      - mongo
+      - postgres
